@@ -17,7 +17,12 @@ import matplotlib.pyplot as plt
 from scipy.linalg import svd
 from scipy import stats
 
-filename = '../Data/kc_house_data.csv'
+import seaborn as sns
+import missingno as msno
+from IPython.display import display
+
+
+filename = 'C:/Users/Kovacs Bertalan/Desktop/Intro_to_ML_Official/02450Toolbox_Python/Machine-Learning/kc_house_data.csv'
 df = pd.read_csv(filename)
 raw_data = df.get_values()
 
@@ -28,6 +33,16 @@ classLabels = raw_data[:,22]
 classNames = np.unique(classLabels)
 N, M = X.shape
 C = len(classNames)
+
+#%% Missing value BERCI
+msno.matrix(df)
+
+
+# correlation matrix BERCI
+f, ax = plt.subplots(figsize=(16, 10))
+corr = df.corr()
+corr_mtx = sns.heatmap(corr, mask=np.zeros_like(corr, dtype=np.bool), cmap=sns.diverging_palette(220, 10, as_cmap=True),
+            square=False, ax=ax, annot = True)
 
 #%% Modifying the dataset
 # Add year and month columns
@@ -82,17 +97,90 @@ plt.ylabel(attributeNames_c[j])
 plt.savefig('Regression_problem.png')
 plt.show()
 
-#%% Missing values, corrupted data, standard statistics
+#%% Standard statistics
 # No missing data or corrupted values
-
 X_means = X[:,2:24].mean(0)
-X_mode = stats.mode(X[:,2:24])
+X_mode = stats.mode(X[:,2:24].astype('float'))
 X_range = np.zeros(24)
 X_stddev = np.zeros(24)
 for i in np.arange(2, 24):
     X_range[i] = np.max(X[:,i]) - np.min(X[:,i])
-    X_stddev[i] = X[:,i].std(0)
+    X_stddev[i] = X[:,i].std(0)    
 
+
+#%% Standardization 
+X_rel = np.zeros((N, M))
+for i in np.arange(2, 24):
+    X_rel[:, i] = np.asarray(X[:, i])
+X_rel = X_rel[:,2:24]  
+X_norm = X_rel - np.ones((N, 1))*X_rel.mean(0)
+X_norm = X_norm*(1/np.std(X_norm,0))
+# attributeNames_norm = np.concatenate((np.expand_dims(attributeNames[0],axis=0), attributeNames[2:24]))
+attributeNames_norm = attributeNames[2:24]
+
+#%% boxplot BERCI
+dpi=300
+total_index, plot_index = 0, 0
+fig = plt.figure(figsize=(20, 20), dpi=dpi)
+for attName in attributeNames:
+    if (attName != 'date') and (attName != 'category'):
+        plt.subplot(5,5, plot_index + 1)
+        ax = sns.boxplot(x=X[:,total_index].astype(float))
+        ax.set_title(attName)
+        ax.plot()
+        plot_index+=1
+    total_index+=1
+plt.show()
+#%%
+
+total_index, plot_index = 0, 0
+fig = plt.figure(figsize=(20, 20), dpi=dpi)
+for attName in attributeNames_norm:
+    if (attName != 'id') and (attName != 'date') and (attName != 'category'):
+        plt.subplot(5,5, plot_index + 1)
+        ax = sns.boxplot(x=X_norm[:,plot_index].astype(float)).set_title(attName)
+        ax.plot()
+        plot_index+=1
+    total_index+=1
+plt.show()
+
+#%% what effect they have on the predictor BERCI
+n_row = 5
+n_col = 4
+f, axes = plt.subplots(n_row, n_col, figsize=(30, 25), dpi=100)
+k = 0
+hist_bool = False
+for attName in attributeNames:
+    if (attName != 'date') and (attName != 'category') and (attName != 'encoded'):
+        sns.distplot(df[df['encoded']==0][attName], hist = hist_bool, kde = True, label = 'High',ax=axes[int(k/n_col), k%n_col])#.set_title(list_of_variables[k])
+        sns.distplot(df[df['encoded']==1][attName], hist = hist_bool, kde = True, label = 'Medium',ax=axes[int(k/n_col), k%n_col])#.set_title(list_of_variables[k])
+        sns.distplot(df[df['encoded']==2][attName], hist = hist_bool, kde = True, label = 'Low',ax=axes[int(k/n_col), k%n_col])#.set_title(list_of_variables[k])
+        k+=1
+        
+        
+#%% distribution histograms BERCI
+dpi=300
+n_row = 6
+n_col = 4
+f2, axes2 = plt.subplots(n_row, n_col, figsize=(30, 25), dpi=dpi)
+k, l = 0, 0
+for attName in attributeNames:
+    if (attName != 'id') and (attName != 'date') and (attName != 'category') and (attName != 'encoded'):
+        sns.distplot(a=X[:,l].astype(float), hist = True, kde = True,ax=axes2[int(k/n_col), k%n_col]).set_title(attName)
+        k+=1
+    l+=1
+plt.show()
+
+n_row = 6
+n_col = 4
+f2, axes2 = plt.subplots(n_row, n_col, figsize=(30, 25), dpi=dpi)
+k, l = 0, 0
+for attName in attributeNames_norm:
+    if (attName != 'date') and (attName != 'category') and (attName != 'encoded'):
+        sns.distplot(a=X_norm[:,l].astype(float), hist = True, kde = True,ax=axes2[int(k/n_col), k%n_col]).set_title(attName)
+        k+=1
+    l+=1
+plt.show()
 #%% PCA - normalized vs original - We did not use this at the end, we were just
 # curious how much normalization effects our results 
 # Only take relevant data
