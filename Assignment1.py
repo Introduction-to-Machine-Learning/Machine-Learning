@@ -138,7 +138,8 @@ fig = plt.figure(figsize=(20, 20), dpi=dpi)
 for attName in attributeNames_norm:
     if (attName != 'id') and (attName != 'date') and (attName != 'category'):
         plt.subplot(5,5, plot_index + 1)
-        ax = sns.boxplot(x=X_norm[:,plot_index].astype(float)).set_title(attName)
+        ax = sns.boxplot(x=X_norm[:,plot_index].astype(float))
+        ax.set_title(attName)
         ax.plot()
         plot_index+=1
     total_index+=1
@@ -151,7 +152,7 @@ f, axes = plt.subplots(n_row, n_col, figsize=(30, 25), dpi=100)
 k = 0
 hist_bool = False
 for attName in attributeNames:
-    if (attName != 'date') and (attName != 'category') and (attName != 'encoded'):
+    if (attName != 'year') and (attName != 'month') and (attName != 'date') and (attName != 'category') and (attName != 'encoded'):
         sns.distplot(df[df['encoded']==0][attName], hist = hist_bool, kde = True, label = 'High',ax=axes[int(k/n_col), k%n_col])#.set_title(list_of_variables[k])
         sns.distplot(df[df['encoded']==1][attName], hist = hist_bool, kde = True, label = 'Medium',ax=axes[int(k/n_col), k%n_col])#.set_title(list_of_variables[k])
         sns.distplot(df[df['encoded']==2][attName], hist = hist_bool, kde = True, label = 'Low',ax=axes[int(k/n_col), k%n_col])#.set_title(list_of_variables[k])
