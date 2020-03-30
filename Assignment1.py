@@ -22,9 +22,9 @@ import missingno as msno
 from IPython.display import display
 
 
-filename = 'C:/Users/Kovacs Bertalan/Desktop/Intro_to_ML_Official/02450Toolbox_Python/Machine-Learning/kc_house_data.csv'
+filename = 'C:/Users/Kalci/Documents/GitHub/Machine-Learning/kc_house_data.csv'
 df = pd.read_csv(filename)
-raw_data = df.get_values()
+raw_data = df.to_numpy()
 
 cols = range(0, 23) 
 X = raw_data[:, cols]
