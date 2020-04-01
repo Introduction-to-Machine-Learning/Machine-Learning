@@ -9,6 +9,9 @@ import numpy as np
 import pandas as pd
 import matplotlib.pyplot as plt
 import sklearn as skl
+import sklearn.linear_model
+import sklearn.tree
+from toolbox_02450 import jeffrey_interval, mcnemar
 
 filename = 'C:/Users/Kalci/Documents/GitHub/Machine-Learning/kc_house_data.csv'
 df = pd.read_csv(filename)
@@ -56,32 +59,61 @@ y=y.astype('int')
 
 #%% Generating the baseline model
 no_low=0; no_average=0; no_good=0; no_high=0; i=0;
-categories=["Low","Average","Good","High"];
 for i in range (N):
     if X[i,23]==0:
-        no_low = no_low+1;
+        no_low += 1;
     elif X[i,23]==1:
-        no_average = no_average+1;
+        no_average += 1;
     elif X[i,23]==2:
-        no_good = no_good+1;
+        no_good += 1;
     else:
-        no_high=no_high+1;
-print('The most common value is: ',categories[np.argmax(np.array([no_low, no_average, no_good, no_high]))]) 
-  
+        no_high += 1;
+common_value = np.argmax(np.array([no_low, no_average, no_good, no_high]))
+
+K = 10;
+CV = skl.model_selection.KFold(n_splits=K,shuffle=True)
+
+error_test = np.ones(K);  
+k=0;
+
+for train_index, test_index in CV.split(X_norm):
+    print('Computing external CV fold: {0}/{1}..'.format(k+1,K))
+    X_train, y_train = X_norm[train_index,:], y[train_index]
+    X_test, y_test = X_norm[test_index,:], y[test_index]
+    i=0; missclass_rate = 0;
+    for i in range(len(y_test)):
+        if y_test[i] != common_value:
+            missclass_rate = missclass_rate + 1;
+    error_test[k] = missclass_rate/len(y_test);
+    k+=1
+
+#%% Visualization
+names = ['$F_1$', '$F_2$', '$F_3$', '$F_4$', '$F_5$', '$F_6$', '$F_7$', '$F_8$', '$F_9$', '$F_{10}$']
+f = plt.figure()
+plt.plot(names[0:K], error_test*100)
+plt.ylabel('Test error rate [%]')
+plt.xlabel('Fold index $F_i$')
+plt.title('Generalization error for baseline model')
+plt.grid()
+plt.show()
+
+print('The estimate of the generalization error is: ',np.average(error_test)*100);
 #%% Tree complexity parameter - constraint on maximum depth
-tc = np.arange(3, 10, 1)
+tc = np.arange(3, 19, 1)
 
 # K-fold crossvalidation
-K_ext = 2;
+K_ext = 10;
 CV_ext = skl.model_selection.KFold(n_splits=K_ext,shuffle=True)
 
 # Initialize variable
-K_int=2;
-Error_train = np.empty((len(tc),K_int))
-Error_test = np.empty((len(tc),K_int))
+K_int=10;
+Error_train_int = np.empty((len(tc),K_int))
+Error_test_int = np.empty((len(tc),K_int))
 
-Error_train_ext = np.empty([1,K_ext]);
-Error_test_ext = np.empty([1,K_ext]);
+Error_train_ext = np.zeros(K_ext);
+Error_test_ext = np.ones(K_ext);
+
+best_treedepth_int = np.zeros(K_ext);
 
 k=0
 
@@ -111,52 +143,66 @@ for train_index_ext, test_index_ext in CV_ext.split(X_norm):
             # Evaluate misclassification rate over train/test data (in this CV fold)
             misclass_rate_test = np.sum(y_est_test != y_test_int) / float(len(y_est_test))
             misclass_rate_train = np.sum(y_est_train != y_train_int) / float(len(y_est_train))
-            Error_test[i,j], Error_train[i,j] = misclass_rate_test, misclass_rate_train
-            # Here we should save that at what depth we had the least error
+            Error_test_int[i,j], Error_train_int[i,j] = misclass_rate_test, misclass_rate_train
         j+=1;
-    k+=1;
+    
     
     f = plt.figure()
-    plt.boxplot(Error_test.T,positions=tc)
+    plt.boxplot(Error_test_int.T,positions=tc)
     plt.xlabel('Model complexity (max tree depth)')
     plt.ylabel('Test error across CV folds, K={0})'.format(K_int))
     
     f = plt.figure()
-    plt.plot(tc, Error_train.mean(1))
-    plt.plot(tc, Error_test.mean(1))
+    plt.plot(tc, Error_train_int.mean(1))
+    plt.plot(tc, Error_test_int.mean(1))
     plt.xlabel('Model complexity (max tree depth)')
     plt.ylabel('Error (misclassification rate, CV K={0})'.format(K_int))
     plt.legend(['Error_train','Error_test'])
-        
     plt.show()
+    
+    best_treedepth_int[k] = np.argmin(Error_test_int[:,k])+np.min(tc)+1
+    print('The optimal tree depth is: ', best_treedepth_int[k]);
+    dtc = skl.tree.DecisionTreeClassifier(criterion='gini', max_depth=best_treedepth_int[k])
+    dtc = dtc.fit(X_train_ext,y_train_ext.ravel())
+    y_est_test = dtc.predict(X_test_ext)
+    y_est_train = dtc.predict(X_train_ext)
+    misclass_rate_test = np.sum(y_est_test != y_test_ext) / float(len(y_est_test))
+    misclass_rate_train = np.sum(y_est_train != y_train_ext) / float(len(y_est_train))
+    Error_test_ext[k], Error_train_ext[k] = misclass_rate_test, misclass_rate_train
+    k+=1;
 
-i=0;
-barData=np.zeros([1,len(tc)]);
-for i in range(K_int):
-    Error_test_ext[0,i]=np.argmin(Error_test[:,i]);
-    Error_train_ext[0,i]=np.argmin(Error_train[:,i]);
-    barData[0,np.int_(Error_test_ext[0,i])]=barData[0,np.int_(Error_test_ext[0,i])]+1;
+print('Done with classification tree')
+#%% Visualization
+names = ['$M_1$', '$M_2$', '$M_3$', '$M_4$', '$M_5$', '$M_6$', '$M_7$', '$M_8$', '$M_9$', '$M_{10}$']
+f = plt.figure()
+plt.plot(names[0:K_ext], Error_test_ext*100, Error_train_ext*100)
+plt.ylabel('Error rate [%]')
+plt.xlabel('Model index $M_i$')
+plt.title('Training error and estimate of generalization error ')
+plt.legend(['Test error','Train error'])
+plt.grid()
+plt.show()
 
-plt.bar(tc, barData[0,:], align='center', alpha=0.99, color='b')
-plt.ylabel('Times of least generalization error')
-plt.xlabel('Number of splits in decision tree ')
-plt.title('Split number of most successful splits')
-plt.show
+best_treedepth = best_treedepth_int[np.argmin(Error_test_ext)]
+print('The estimate of the generalization error is: ',np.average(Error_test_ext)*100);
+print('The tree depth in the best case is:', best_treedepth, 'with the error of', np.min(Error_test_ext)*100, '%');
 
 #%% Logistic regression
-K_ext = 2;
-K_int=2;
-lambda_interval = np.logspace(-3, 4, 50)
+K_ext = 10;
+K_int=10;
+lambda_interval = np.logspace(-2, 4, 50)
 CV_ext = skl.model_selection.KFold(n_splits=K_ext,shuffle=True)
 Error_train_int = np.zeros((K_int, len(lambda_interval)))
 Error_test_int = np.zeros((K_int, len(lambda_interval)))
 coefficient_norm = np.zeros((len(lambda_interval),K_int))
 w_est = np.zeros((20,K_int))
 min_error = np.zeros(K_int)
+best_error = np.zeros(K_ext)
+best_lambda = np.zeros(K_ext)
 opt_lambda_idx = np.zeros(K_int)
 opt_lambda = np.zeros(K_int)
 Error_train_ext = np.zeros(K_ext);
-Error_test_ext = np.zeros(K_ext);
+Error_test_ext = np.ones(K_ext);
 k=0
 
 for train_index_ext, test_index_ext in CV_ext.split(X_norm):
@@ -175,7 +221,7 @@ for train_index_ext, test_index_ext in CV_ext.split(X_norm):
         X_test_int, y_test_int = X_train_ext[test_index_int,:], y_train_ext[test_index_int]
 
         for i in range(0, len(lambda_interval)):
-            mdl = skl.linear_model.LogisticRegression(penalty='l2', max_iter=2000, multi_class='multinomial', C=1/lambda_interval[i])
+            mdl = skl.linear_model.LogisticRegression(penalty='l2', max_iter=3000, multi_class='multinomial', C=1/lambda_interval[i])
             mdl.fit(X_train_int, y_train_int)
             
             y_train_est = mdl.predict(X_train_int).T
@@ -195,7 +241,7 @@ for train_index_ext, test_index_ext in CV_ext.split(X_norm):
         plt.semilogx(np.transpose(lambda_interval), Error_train_int[j,:]*100)
         plt.semilogx(np.transpose(lambda_interval), Error_test_int[j,:]*100)
         plt.semilogx(opt_lambda[j], min_error[j]*100, 'o')
-        plt.text(1e-3, 18.5, "Minimum test error: " + str(np.round(min_error[j]*100,2)) + ' % at 1e' + str(np.round(np.log10(opt_lambda[j]),2)))
+        plt.text(1e-2, 20, "Minimum test error: " + str(np.round(min_error[j]*100,2)) + ' % at 1e' + str(np.round(np.log10(opt_lambda[j]),2)))
         plt.xlabel('Regularization strength, $\log_{10}(\lambda)$')
         plt.ylabel('Error rate (%)')
         plt.title('Classification error')
@@ -213,9 +259,10 @@ for train_index_ext, test_index_ext in CV_ext.split(X_norm):
         j+=1;
     
     # So now we will have the best model and we can use that
+    best_error[k] = np.min(min_error[:]);
     best_model = np.argmin(min_error[:]);
-    best_lambda = opt_lambda[best_model];
-    mdl = skl.linear_model.LogisticRegression(penalty='l2', max_iter=2000, multi_class='multinomial', C=1/best_lambda)
+    best_lambda[k] = opt_lambda[best_model];
+    mdl = skl.linear_model.LogisticRegression(penalty='l2', max_iter=3000, multi_class='multinomial', C=1/best_lambda[k])
     mdl.fit(X_train_ext, y_train_ext)
             
     y_train_est = mdl.predict(X_train_ext).T
@@ -230,4 +277,73 @@ for train_index_ext, test_index_ext in CV_ext.split(X_norm):
     k+=1;
     
 #%% Visualization
+names = ['$M_1$', '$M_2$', '$M_3$', '$M_4$', '$M_5$', '$M_6$', '$M_7$', '$M_8$', '$M_9$', '$M_{10}$']
+f = plt.figure()
+plt.plot(names[0:K_ext], Error_test_ext*100, Error_train_ext*100)
+plt.ylabel('Error rate [%]')
+plt.xlabel('Model index $M_i$')
+plt.title('Training error and estimate of generalization error ')
+plt.legend(['Test error','Train error'])
+plt.grid()
+plt.show()
 
+print('The estimate of the generalization error is: ',np.average(Error_test_ext));
+print('The best model on the outer fold is number', np.argmin(Error_test_ext)+1,'with lamda=',best_lambda[np.argmin(Error_test_ext)],'and error=',np.min(Error_test_ext))
+
+#%% Statistical evaluations of results
+K = 10;
+CV = skl.model_selection.KFold(n_splits=K,shuffle=True)
+k=0
+y_true = []
+y_hat_lr = []
+y_hat_tree = []
+
+for train_index, test_index in CV.split(X_norm):
+    print('Computing external CV fold: {0}/{1}..'.format(k+1,K))
+    X_train, y_train = X_norm[train_index,:], y[train_index]
+    X_test, y_test = X_norm[test_index,:], y[test_index]
+    
+    mdl = skl.linear_model.LogisticRegression(penalty='l2', max_iter=3000, multi_class='multinomial', C = best_lambda[np.argmin(Error_test_ext)])
+    mdl.fit(X_train, y_train)
+    y_est_lr = mdl.predict(X_test).T
+    
+    dtc = skl.tree.DecisionTreeClassifier(criterion='gini', max_depth=best_treedepth)
+    dtc = dtc.fit(X_train,y_train.ravel())
+    y_est_tree = dtc.predict(X_test)
+    
+    y_hat_lr = np.concatenate((y_hat_lr, y_est_lr), axis=0)
+    y_hat_tree = np.concatenate((y_hat_tree, y_est_tree), axis=0)
+    y_true = np.concatenate((y_true, y_test), axis=0)
+    
+    k+=1;
+    
+# Jeffreys interval for baseline
+y_hat_base = np.ones(len(y_true))*common_value;
+alpha = 0.05;
+[thetahatA, CIA] = jeffrey_interval(y_true, y_hat_base, alpha=alpha)
+print("Theta point estimate", thetahatA, " CI: ", CIA)
+
+# Jeffreys interval for CT
+alpha = 0.05;
+[thetahatA, CIA] = jeffrey_interval(y_true, y_hat_tree, alpha=alpha)
+print("Theta point estimate", thetahatA, " CI: ", CIA)
+
+# Jeffreys interval for logistic regression
+alpha = 0.05;
+[thetahatA, CIA] = jeffrey_interval(y_true, y_hat_lr, alpha=alpha)
+print("Theta point estimate", thetahatA, " CI: ", CIA)
+
+# Compare logistic regression and CT
+alpha = 0.05
+[thetahat, CI, p] = mcnemar(y_true, y_hat_lr ,y_hat_tree, alpha=alpha)
+print("theta = theta_A-theta_B point estimate", thetahat, " CI: ", CI, "p-value", p)
+
+# Compare logistic regression and baseline
+alpha = 0.05
+[thetahat, CI, p] = mcnemar(y_true, y_hat_lr, y_hat_base, alpha=alpha)
+print("theta = theta_A-theta_B point estimate", thetahat, " CI: ", CI, "p-value", p)
+
+# Compare baseline and CT
+alpha = 0.05
+[thetahat, CI, p] = mcnemar(y_true, y_hat_base, y_hat_tree, alpha=alpha)
+print("theta = theta_A-theta_B point estimate", thetahat, " CI: ", CI, "p-value", p)
