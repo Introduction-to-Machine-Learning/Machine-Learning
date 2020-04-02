@@ -182,6 +182,8 @@ plt.legend()
 
 plt.tight_layout()
 plt.show()
+
+
 #%% REGRESSION B.1: 2-layer crossvalidation for the three models: 
 # Linear regression, ANN, Baseline
 
@@ -200,6 +202,8 @@ Error_train_rlr = np.empty((K,1))
 Error_test_rlr = np.empty((K,1))
 Error_train_nofeatures = np.empty((K,1))
 Error_test_nofeatures = np.empty((K,1))
+Error_test_ANN = np.empty((K,1))
+optimal_layer_num = np.empty((K,1))
 w_rlr = np.empty((M,K))
 mu = np.empty((K, M-1))
 sigma = np.empty((K, M-1))
@@ -273,24 +277,19 @@ for (k, (train_index, test_index)) in enumerate(CV.split(X,y)):
     
     # --------------------------------- ANN start ---------------------------------
     # Parameters for neural network classifier
-    n_hidden_units, n_replicates, max_iter = 2, 1, 10000  # number of hidden units, networks and max iteration
+    n_hidden_units_list = [2, 3]
+    n_replicates, max_iter = 1, 10000  # number of hidden units, networks and max iteration
     
     # Setup figure for display of learning curves and error rates in fold
     summaries, summaries_axes = plt.subplots(1,2, figsize=(10,5))
     # Make a list for storing assigned color of learning curve for up to K=10
     color_list = ['tab:orange', 'tab:green', 'tab:purple', 'tab:brown', 'tab:pink',
                   'tab:gray', 'tab:olive', 'tab:cyan', 'tab:red', 'tab:blue']
-    # Define the model
-    model = lambda: torch.nn.Sequential(
-                        torch.nn.Linear(M, n_hidden_units), #M features to n_hidden_units
-                        torch.nn.Tanh(),   # 1st transfer function,
-                        torch.nn.Linear(n_hidden_units, 1), # n_hidden_units to 1 output neuron
-                        # no final tranfer function, i.e. "linear output"
-                        )
+
     loss_fn = torch.nn.MSELoss() # notice how this is now a mean-squared-error loss
     
-    print('Training model of type:\n\n{}\n'.format(str(model())))
-    errors = [] # make a list for storing generalizaition error in each loop
+    val_errors = [] # make a list for storing generalizaition error in each loop
+    opt_layer_nums = []
     for (i, (train_index_ANN, test_index_ANN)) in enumerate(CV.split(X_train,y_train)): 
         print('\nCrossvalidation fold: {0}/{1}'.format(i+1,internal_cross_validation))    
         
@@ -300,34 +299,60 @@ for (k, (train_index, test_index)) in enumerate(CV.split(X,y)):
         X_test_ANN = torch.Tensor(X_train[test_index_ANN,:])
         y_test_ANN = torch.Tensor(y_train[test_index_ANN])
         
-        # Train the net on training data
-        net, final_loss, learning_curve = train_neural_net(model,
+        learning_curves = []
+        layer_errors = []
+        nets = []
+        
+        for h, n_hidden_units in enumerate(n_hidden_units_list):
+            print('\tNumber of layers: {0}'.format(n_hidden_units)) 
+            # Define the model
+            model = lambda: torch.nn.Sequential(
+                            torch.nn.Linear(M, n_hidden_units), #M features to n_hidden_units
+                            torch.nn.Tanh(),   # 1st transfer function,
+                            torch.nn.Linear(n_hidden_units, 1), # n_hidden_units to 1 output neuron
+                            # no final tranfer function, i.e. "linear output"
+                            )
+        
+            # Train the net on training data
+            net, final_loss, learning_curve = train_neural_net(model,
                                                            loss_fn,
                                                            X=X_train_ANN,
                                                            y=np.reshape(y_train_ANN, (-1,1)),
                                                            n_replicates=n_replicates,
                                                            max_iter=max_iter)
+            
+            # Determine estimated class labels for test set
+            y_test_est_ANN = net(X_test_ANN)
+            
+            # Determine errors and errors
+            se = (y_test_est_ANN.float().view(-1)-y_test_ANN.float())**2 # squared error
+            mse = (sum(se).type(torch.float)/len(y_test_ANN)).data.numpy() #mean
+            layer_errors.append(mse) # store error rate for current CV fold 
+            learning_curves.append(learning_curve)
+            nets.append(net)
+            print('\n\tBest training loss: {}'.format(final_loss))
+            print('\tBest validation loss: {}\n'.format(mse))
         
-        print('\n\tBest loss: {}\n'.format(final_loss))
+        opt_val_err = min(layer_errors)
+        opt_layer_num = n_hidden_units_list[layer_errors.index(opt_val_err)]
+        opt_learning_curve = learning_curves[layer_errors.index(opt_val_err)]
+        opt_net = nets[layer_errors.index(opt_val_err)]
+        opt_layer_nums.append(opt_layer_num)
+        val_errors.append(opt_val_err)
         
-        # Determine estimated class labels for test set
-        y_test_est_ANN = net(X_test_ANN)
+        print("Lowest error is {} with layer number {}.".format(opt_val_err, opt_layer_num))
+    
         
-        # Determine errors and errors
-        se = (y_test_est_ANN.float().view(-1)-y_test_ANN.float())**2 # squared error
-        mse = (sum(se).type(torch.float)/len(y_test_ANN)).data.numpy() #mean
-        errors.append(mse) # store error rate for current CV fold 
-        
-        # Display the learning curve for the best net in the current fold
-        h, = summaries_axes[0].plot(learning_curve, color=color_list[i])
+        # Display the learning curve for the best net in the current fold      
+        h, = summaries_axes[0].plot(opt_learning_curve, color=color_list[i])
         h.set_label('CV fold {0}'.format(i+1))
         summaries_axes[0].set_xlabel('Iterations')
         summaries_axes[0].set_xlim((0, max_iter))
         summaries_axes[0].set_ylabel('Loss')
         summaries_axes[0].set_title('Learning curves')
-    
+            
     # Display the MSE across folds
-    summaries_axes[1].bar(np.arange(1, internal_cross_validation+1), np.squeeze(np.asarray(errors)), color=color_list)
+    summaries_axes[1].bar(np.arange(1, internal_cross_validation+1), np.squeeze(np.asarray(val_errors)), color=color_list)
     summaries_axes[1].set_xlabel('Fold')
     summaries_axes[1].set_xticks(np.arange(1, internal_cross_validation+1))
     summaries_axes[1].set_ylabel('MSE')
@@ -338,9 +363,6 @@ for (k, (train_index, test_index)) in enumerate(CV.split(X,y)):
     biases = [net[j].bias.data.numpy() for j in [0,2]]
     tf =  [str(net[j]) for j in [1,2]]
     draw_neural_net(weights, biases, tf, attribute_names=list(attributeNames))
-    
-    # Print the average classification error rate
-    print('\nEstimated generalization error, RMSE: {0}'.format(round(np.sqrt(np.mean(errors)), 4)))
     
     # When dealing with regression outputs, a simple way of looking at the quality
     # of predictions visually is by plotting the estimated value as a function of 
@@ -359,6 +381,9 @@ for (k, (train_index, test_index)) in enumerate(CV.split(X,y)):
     plt.ylabel('Estimated value')
     plt.grid()
     plt.show()
+    
+    Error_test_ANN[k] = round(np.sqrt(np.mean(val_errors)), 4)
+    optimal_layer_num[k] = round(np.median(opt_layer_nums))
     # ---------------------------------- ANN end ----------------------------------
     
     # To inspect the used indices, use these print statements
@@ -368,7 +393,7 @@ for (k, (train_index, test_index)) in enumerate(CV.split(X,y)):
     print('Test error with Baseline model: ', Error_test_nofeatures[k])
     print('Test error with regression model: ', Error_test_nofeatures[k])
     print('Test error with regularizedregression model: ', Error_test_nofeatures[k])
-    print('Test error with ANN: ')
+    print('Test error with ANN, RMSE: {0}'.format(round(np.sqrt(np.mean(val_errors)), 4)))
 
 plt.show()
 # Display results
@@ -386,28 +411,31 @@ print('- R^2 test:     {0}\n'.format((Error_test_nofeatures.sum()-Error_test_rlr
 print('Weights in last fold:')
 for m in range(M):
     print('{:>15} {:>15}'.format(attributeNames[m], np.round(w_rlr[m,-1],2)))
-    
+
+print('ANN:')
+print('- Test error:     {0}'.format(Error_test_ANN.mean()))
+print('- R^2 test:     {0}\n'.format((Error_test_nofeatures.sum()-Error_test_ANN.sum())/Error_test_nofeatures.sum()))
 #%% ANN
 # --------------------------------- ANN start ---------------------------------
+    
+CV = model_selection.KFold(K, shuffle=True)
+
 # Parameters for neural network classifier
-n_hidden_units, n_replicates, max_iter = 2, 1, 10000  # number of hidden units, networks and max iteration
+n_hidden_units_list = [2, 3]
+n_replicates, max_iter = 1, 10000  # number of hidden units, networks and max iteration
+K = 3
 
 # Setup figure for display of learning curves and error rates in fold
 summaries, summaries_axes = plt.subplots(1,2, figsize=(10,5))
 # Make a list for storing assigned color of learning curve for up to K=10
 color_list = ['tab:orange', 'tab:green', 'tab:purple', 'tab:brown', 'tab:pink',
               'tab:gray', 'tab:olive', 'tab:cyan', 'tab:red', 'tab:blue']
-# Define the model
-model = lambda: torch.nn.Sequential(
-                    torch.nn.Linear(M, n_hidden_units), #M features to n_hidden_units
-                    torch.nn.Tanh(),   # 1st transfer function,
-                    torch.nn.Linear(n_hidden_units, 1), # n_hidden_units to 1 output neuron
-                    # no final tranfer function, i.e. "linear output"
-                    )
+
 loss_fn = torch.nn.MSELoss() # notice how this is now a mean-squared-error loss
 
 print('Training model of type:\n\n{}\n'.format(str(model())))
 errors = [] # make a list for storing generalizaition error in each loop
+
 for (k, (train_index, test_index)) in enumerate(CV.split(X,y)): 
     print('\nCrossvalidation fold: {0}/{1}'.format(k+1,K))    
     
@@ -417,31 +445,57 @@ for (k, (train_index, test_index)) in enumerate(CV.split(X,y)):
     X_test = torch.Tensor(X[test_index,:])
     y_test = torch.Tensor(y[test_index])
     
-    # Train the net on training data
-    net, final_loss, learning_curve = train_neural_net(model,
-                                                       loss_fn,
-                                                       X=X_train,
-                                                       y=np.reshape(y_train, (-1,1)),
-                                                       n_replicates=n_replicates,
-                                                       max_iter=max_iter)
+    learning_curves = []
+    layer_errors = []
+    nets = []
     
-    print('\n\tBest loss: {}\n'.format(final_loss))
+    for h, n_hidden_units in enumerate(n_hidden_units_list):
+        print('\tNumber of layers: {0}'.format(n_hidden_units)) 
+        # Define the model
+        model = lambda: torch.nn.Sequential(
+                        torch.nn.Linear(M, n_hidden_units), #M features to n_hidden_units
+                        torch.nn.Tanh(),   # 1st transfer function,
+                        torch.nn.Linear(n_hidden_units, 1), # n_hidden_units to 1 output neuron
+                        # no final tranfer function, i.e. "linear output"
+                        )
     
-    # Determine estimated class labels for test set
-    y_test_est = net(X_test)
+        # Train the net on training data
+        net, final_loss, learning_curve = train_neural_net(model,
+                                                           loss_fn,
+                                                           X=X_train,
+                                                           y=np.reshape(y_train, (-1,1)),
+                                                           n_replicates=n_replicates,
+                                                           max_iter=max_iter)
+        
+        # Determine estimated class labels for test set
+        y_test_est = net(X_test)
+        
+        # Determine errors and errors
+        se = (y_test_est.float().view(-1)-y_test.float())**2 # squared error
+        mse = (sum(se).type(torch.float)/len(y_test)).data.numpy() #mean
+        layer_errors.append(mse) # store error rate for current CV fold 
+        learning_curves.append(learning_curve)
+        nets.append(net)
+        print('\n\tBest training loss: {}'.format(final_loss))
+        print('\n\tBest validation loss: {}\n'.format(mse))
     
-    # Determine errors and errors
-    se = (y_test_est.float().view(-1)-y_test.float())**2 # squared error
-    mse = (sum(se).type(torch.float)/len(y_test)).data.numpy() #mean
-    errors.append(mse) # store error rate for current CV fold 
+    opt_val_err = min(layer_errors)
+    opt_layer_num = n_hidden_units_list[layer_errors.index(opt_val_err)]
+    opt_learning_curve = learning_curves[layer_errors.index(opt_val_err)]
+    opt_net = nets[layer_errors.index(opt_val_err)]
+    errors.append(opt_val_err)
+    
+    print("Lowest error is {} with layer number {}.".format(opt_val_err, opt_layer_num))
+
     
     # Display the learning curve for the best net in the current fold
-    h, = summaries_axes[0].plot(learning_curve, color=color_list[k])
+    h, = summaries_axes[0].plot(opt_learning_curve, color=color_list[k])
     h.set_label('CV fold {0}'.format(k+1))
     summaries_axes[0].set_xlabel('Iterations')
     summaries_axes[0].set_xlim((0, max_iter))
     summaries_axes[0].set_ylabel('Loss')
     summaries_axes[0].set_title('Learning curves')
+    
 
 # Display the MSE across folds
 summaries_axes[1].bar(np.arange(1, K+1), np.squeeze(np.asarray(errors)), color=color_list)
@@ -456,7 +510,7 @@ biases = [net[i].bias.data.numpy() for i in [0,2]]
 tf =  [str(net[i]) for i in [1,2]]
 draw_neural_net(weights, biases, tf, attribute_names=list(attributeNames))
 
-# Print the average classification error rate
+# Print the average error rate
 print('\nEstimated generalization error, RMSE: {0}'.format(round(np.sqrt(np.mean(errors)), 4)))
 
 # When dealing with regression outputs, a simple way of looking at the quality
