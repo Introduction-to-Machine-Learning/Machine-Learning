@@ -106,7 +106,7 @@ K_ext = 10;
 CV_ext = skl.model_selection.KFold(n_splits=K_ext,shuffle=True)
 
 # Initialize variable
-K_int=10;
+K_int = 10;
 Error_train_int = np.empty((len(tc),K_int))
 Error_test_int = np.empty((len(tc),K_int))
 
@@ -160,7 +160,7 @@ for train_index_ext, test_index_ext in CV_ext.split(X_norm):
     plt.legend(['Error_train','Error_test'])
     plt.show()
     
-    best_treedepth_int[k] = np.argmin(Error_test_int[:,k])+np.min(tc)+1
+    best_treedepth_int[k] = tc[np.argmin(np.average(Error_test_int, axis = 1))]
     print('The optimal tree depth is: ', best_treedepth_int[k]);
     dtc = skl.tree.DecisionTreeClassifier(criterion='gini', max_depth=best_treedepth_int[k])
     dtc = dtc.fit(X_train_ext,y_train_ext.ravel())
@@ -197,6 +197,7 @@ Error_test_int = np.zeros((K_int, len(lambda_interval)))
 coefficient_norm = np.zeros((len(lambda_interval),K_int))
 w_est = np.zeros((20,K_int))
 min_error = np.zeros(K_int)
+min_error_val = np.zeros(K_int)
 best_error = np.zeros(K_ext)
 best_lambda = np.zeros(K_ext)
 opt_lambda_idx = np.zeros(K_int)
@@ -233,15 +234,16 @@ for train_index_ext, test_index_ext in CV_ext.split(X_norm):
             w_est[:,j] = mdl.coef_[0]
             coefficient_norm[i,j] = np.sqrt(np.sum(w_est**2))
               
-        min_error[j] = np.min(Error_test_int[j,:])
+        min_error[j] = np.min(np.average(Error_test_int, axis = 1))
+        min_error_val[j] = np.min(Error_test_int[j,:])
         opt_lambda_idx[j] = np.argmin(Error_test_int[j,:])
         opt_lambda[j] = lambda_interval[np.int_(opt_lambda_idx[j])]
         
         plt.figure(figsize=(8,8))
         plt.semilogx(np.transpose(lambda_interval), Error_train_int[j,:]*100)
         plt.semilogx(np.transpose(lambda_interval), Error_test_int[j,:]*100)
-        plt.semilogx(opt_lambda[j], min_error[j]*100, 'o')
-        plt.text(1e-2, 20, "Minimum test error: " + str(np.round(min_error[j]*100,2)) + ' % at 1e' + str(np.round(np.log10(opt_lambda[j]),2)))
+        plt.semilogx(opt_lambda[j], min_error_val[j]*100, 'o')
+        plt.text(1e-2, 20, "Minimum test error: " + str(np.round(min_error_val[j]*100,2)) + ' % at 1e' + str(np.round(np.log10(opt_lambda[j]),2)))
         plt.xlabel('Regularization strength, $\log_{10}(\lambda)$')
         plt.ylabel('Error rate (%)')
         plt.title('Classification error')
@@ -347,3 +349,15 @@ print("theta = theta_A-theta_B point estimate", thetahat, " CI: ", CI, "p-value"
 alpha = 0.05
 [thetahat, CI, p] = mcnemar(y_true, y_hat_base, y_hat_tree, alpha=alpha)
 print("theta = theta_A-theta_B point estimate", thetahat, " CI: ", CI, "p-value", p)
+
+#%%
+names = attributeNames_norm
+f = plt.figure()
+plt.bar(names, w_est_ext, color=("blue"))
+plt.ylabel('Coefficient value')
+plt.xlabel('Attribute names')
+plt.xticks(rotation=-90)
+plt.title('Values of vector coefficients in classification')
+plt.grid()
+plt.show()
+
