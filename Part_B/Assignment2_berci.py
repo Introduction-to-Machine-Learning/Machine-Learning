@@ -21,6 +21,7 @@ import sklearn.linear_model as lm
 from sklearn import model_selection
 from toolbox_02450 import rlr_validate, train_neural_net, draw_neural_net
 import torch
+import scipy.stats as st
 
 
 filename = 'C:/Users/Kovacs Bertalan/Desktop/Intro_to_ML_Official/02450Toolbox_Python/Machine-Learning/kc_house_data.csv'
@@ -85,7 +86,7 @@ K = 10
 CV = model_selection.KFold(K, shuffle=True)
 
 # Values of lambda
-lambdas = np.power(10.,np.linspace(0,4,25,endpoint=True))
+lambdas = np.power(10.,np.linspace(-1,7,25,endpoint=True))
 
 # Regularized linear regression model validation based on rlr_validate()
 # function from __init__.py
@@ -129,54 +130,54 @@ test_err_vs_lambda = np.mean(test_error,axis=0)
 mean_w_vs_lambda = np.squeeze(np.mean(w,axis=1))
 
 # Display the results
-# plt.figure(1, figsize=(12,8))
-# plt.subplot(1,2,1)
-# plt.semilogx(lambdas,mean_w_vs_lambda.T[:,1:],'.-') # Don't plot the bias term
-# plt.xlabel('Regularization factor')
-# plt.ylabel('Mean Coefficient Values')
-# plt.grid()
+plt.figure(1, figsize=(14,7))
+plt.subplot(1,2,1)
+plt.semilogx(lambdas,mean_w_vs_lambda.T[:,1:],'.-') # Don't plot the bias term
+plt.xlabel('Regularization factor')
+plt.ylabel('Mean Coefficient Values')
+plt.grid()
 # You can choose to display the legend, but it's omitted for a cleaner 
 # plot, since there are many attributes
-#legend(attributeNames[1:], loc='best')
+# legend(attributeNames[1:], loc='best')
 
-# plt.subplot(1,2,2)
-# plt.title('Optimal lambda: 1e{0}'.format(np.log10(opt_lambda)))
-# plt.loglog(lambdas,train_err_vs_lambda.T,'b.-',lambdas,test_err_vs_lambda.T,'r.-')
-# plt.xlabel('Regularization factor')
-# plt.ylabel('Squared error (crossvalidation)')
-# plt.legend(['Train error','Validation error'])
-# plt.grid()
+plt.subplot(1,2,2)
+plt.title('Optimal lambda: 1e{0}'.format(np.log10(opt_lambda)))
+plt.loglog(lambdas,train_err_vs_lambda.T,'b.-',lambdas,test_err_vs_lambda.T,'r.-')
+plt.xlabel('Regularization factor')
+plt.ylabel('Squared error (crossvalidation)')
+plt.legend(['Train error','Validation error'])
+plt.grid()
 
-# plt.show()
+plt.show()
 
 #%% REGRESSION A.3: Selected attributes for future prediction
 w_opt = np.squeeze(np.mean(w[:,:,np.where(lambdas == opt_lambda)],axis=1))
 w_initial = np.squeeze(np.mean(w_noreg,axis=1))
 
 # create plot
-# fig, ax = plt.subplots(figsize=(8,6))
-# index = np.arange(M-1)
-# bar_width = 0.35
-# opacity = 0.8
+fig, ax = plt.subplots(figsize=(8,6))
+index = np.arange(M-1)
+bar_width = 0.35
+opacity = 0.8
 
-# rects1 = plt.bar(index, w_initial[1:], bar_width,
-# alpha=opacity,
-# color='b',
-# label='Without regularization')
+rects1 = plt.bar(index, w_initial[1:], bar_width,
+alpha=opacity,
+color='b',
+label='Without regularization')
 
-# rects2 = plt.bar(index + bar_width, w_opt[1:], bar_width,
-# alpha=opacity,
-# color='g',
-# label='With optimal regularization')
+rects2 = plt.bar(index + bar_width, w_opt[1:], bar_width,
+alpha=opacity,
+color='g',
+label='With optimal regularization')
 
-# plt.xlabel('Feature name')
-# plt.ylabel('Weight score')
-# plt.title('Weight score comparison to predict "price" by linear regression')
-# plt.xticks(index + bar_width, attributeNames[1:], rotation=90)
-# plt.legend()
+plt.xlabel('Feature name')
+plt.ylabel('Weight score')
+plt.title('Weight score comparison to predict "price" by linear regression')
+plt.xticks(index + bar_width, attributeNames[1:], rotation=90)
+plt.legend()
 
-# plt.tight_layout()
-# plt.show()
+plt.tight_layout()
+plt.show()
 
 
 #%% REGRESSION B.1: 2-layer crossvalidation for the three models: 
@@ -189,8 +190,8 @@ CV_1 = model_selection.KFold(K1, shuffle=True)
 CV_2 = model_selection.KFold(K2, shuffle=True)
 
 # Values of lambda and hidden layers
-lambdas = np.power(10.,np.linspace(0,4,25,endpoint=False))
-n_hidden_units_list = [1, 4, 7, 10, 11, 14, 17, 20]
+lambdas = np.power(10.,np.linspace(0,4,41,endpoint=True))
+n_hidden_units_list = [1, 14, 16, 18, 20, 22, 24, 26]
 
 # Initialize variables
 #T = len(lambdas)
@@ -337,3 +338,47 @@ print('\nRegularized test errors: ', list(np.squeeze([error for error in Error_t
 print('Optimal lambdas: ', list(np.squeeze(optimal_lambda)))
 print('\nANN test errors: ', list(np.squeeze([error for error in Error_test_ANN])))
 print('Optimal layer numbers: ', list(np.squeeze(optimal_layer_num)))
+
+#%% REGRESSION B.3: Statistical evaluation by student t test
+    
+# arrays saved after the previously run sections
+baseline_errors = np.asarray((0.8523562965833154, 1.1556699078658708, 0.9014084441484131, 0.7891439507553325, 1.100460083093492, 1.0236335852100231, 0.9285354373736759, 1.0705475566274194, 1.0034611805417308, 1.1718364053365644))
+regression_errors = np.asarray((0.24586721111569254, 0.36986938520098295, 0.27152524480542783, 0.22574251573983908, 0.35212684086887264, 0.2891190220893794, 0.2775752554612212, 0.328468759933837, 0.30969700179575427, 0.3337717634021562))
+ANN_errors = np.asarray((0.09652270376682281, 0.13016873598098755, 0.11177713423967361, 0.08116444945335388, 0.12410551309585571, 0.10008612275123596, 0.09211038798093796, 0.12764288485050201, 0.12598200142383575, 0.11787299811840057))
+
+zA = baseline_errors
+zB = regression_errors
+zC = ANN_errors
+
+# perform statistical comparison of the models
+# compute confidence interval of model A
+alpha = 0.05
+CIA = st.t.interval(1-alpha, df=len(zA)-1, loc=np.mean(zA), scale=st.sem(zA))  # Confidence interval
+
+# compute confidence interval of model B
+alpha = 0.05
+CIB = st.t.interval(1-alpha, df=len(zB)-1, loc=np.mean(zB), scale=st.sem(zB))  # Confidence interval
+
+# compute confidence interval of model C
+alpha = 0.05
+CIC = st.t.interval(1-alpha, df=len(zC)-1, loc=np.mean(zC), scale=st.sem(zC))  # Confidence interval
+
+# Compute confidence interval of z = zA-zB and p-value of Null hypothesis
+z1 = zA - zB
+CI1 = st.t.interval(1-alpha, len(z1)-1, loc=np.mean(z1), scale=st.sem(z1))  # Confidence interval
+p1 = st.t.cdf( -np.abs( np.mean(z1) )/st.sem(z1), df=len(z1)-1)  # p-value
+
+# Compute confidence interval of z = zA-zC and p-value of Null hypothesis
+z2 = zA - zC
+CI2 = st.t.interval(1-alpha, len(z2)-1, loc=np.mean(z2), scale=st.sem(z2))  # Confidence interval
+p2 = st.t.cdf( -np.abs( np.mean(z2) )/st.sem(z2), df=len(z2)-1)  # p-value
+
+# Compute confidence interval of z = zB-zC and p-value of Null hypothesis
+z3 = zB - zC
+CI3 = st.t.interval(1-alpha, len(z3)-1, loc=np.mean(z3), scale=st.sem(z3))  # Confidence interval
+p3 = st.t.cdf( -np.abs( np.mean(z3) )/st.sem(z3), df=len(z3)-1)  # p-value
+
+print(CIA, CIB, CIC)
+print(CI1, CI2, CI3)
+print(p1*100, p2*100, p3*100)
+
